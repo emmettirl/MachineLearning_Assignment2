@@ -5,6 +5,10 @@ from sklearn.model_selection import KFold
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
+import multiprocessing
+
+from multiprocessing import Pool
+
 
 source_filename = 'fashion-mnist_train'
 file_extension = '.csv'
@@ -67,6 +71,7 @@ def display_image(label, features):
 ########################################################################################################################
 
 def task2(labels, features, classifier, num_samples=None):
+    num_processes = multiprocessing.cpu_count() - 2 # Use all but two cores to avoid overloading the system
 
     if num_samples:
         features = features.sample(n=num_samples, random_state=42)
@@ -74,25 +79,24 @@ def task2(labels, features, classifier, num_samples=None):
 
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
     results = []
+    y_tests = []
+    y_preds = []
 
-    i = 0
-    for train_index, test_index in kf.split(features):
+    pool = multiprocessing.Pool(processes=num_processes)
+    args = [(train_index, test_index, features, labels, classifier) for train_index, test_index in kf.split(features)]
+    fold_results = pool.map(train_and_evaluate_fold, args)
+    pool.close()
+    pool.join()
 
-        start_time = time.time()
-        X_train, X_test = features.iloc[train_index], features.iloc[test_index]
-        y_train, y_test = labels.iloc[train_index], labels.iloc[test_index]
+    start_time = time.time()
+    total_folds = len(fold_results)
 
-        classifier.fit(X_train, y_train)
-        training_time = time.time() - start_time
+    for i, (accuracy, training_time, prediction_time, y_test, y_pred) in enumerate(fold_results):
+        results.append((accuracy, training_time, prediction_time))
+        y_tests.append(y_test)
+        y_preds.append(y_pred)
+        print(f'Fold {i + 1}: Accuracy: {accuracy:.2f}, Training Time: {training_time:.2f}s, Prediction Time: {prediction_time:.2f}s')
 
-        y_pred = classifier.predict(X_test)
-        prdiction_time = time.time() - start_time - training_time
-
-        accuracy = (y_pred == y_test).mean()
-        results.append((accuracy, training_time, prdiction_time))
-
-        print(f'Fold {i + 1}: Accuracy: {accuracy:.2f}, Training Time: {training_time:.2f}s, Prediction Time: {prdiction_time:.2f}s')
-        i += 1
 
     # print confusion matrix
     OutputFormat.print_divider('h2')
@@ -115,6 +119,20 @@ def task2(labels, features, classifier, num_samples=None):
 
     return results_df
 
+def train_and_evaluate_fold(args):
+    train_index, test_index, features, labels, classifier = args
+    X_train, X_test = features.iloc[train_index], features.iloc[test_index]
+    y_train, y_test = labels.iloc[train_index], labels.iloc[test_index]
+
+    start_time = time.time()
+    classifier.fit(X_train, y_train)
+    training_time = time.time() - start_time
+
+    y_pred = classifier.predict(X_test)
+    prediction_time = time.time() - start_time - training_time
+
+    accuracy = (y_pred == y_test).mean()
+    return accuracy, training_time, prediction_time, y_test, y_pred
 
 ########################################################################################################################
 # Task 3:  Perceptron Classifier
@@ -243,9 +261,6 @@ def main():
 
     OutputFormat.print_header('h1', 'Task 7: Classifier Comparison')
     task7()
-
-
-
 
 def read_data():
     cache_path = os.path.join(cache_folder, main_cache_filename)
