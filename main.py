@@ -1,12 +1,4 @@
-import math
-import multiprocessing
-import os
-import pickle
-import time
-from multiprocessing import Pool
-
-import pandas as pd
-import sklearn.model_selection
+from copyreg import constructor
 
 source_filename = 'fashion-mnist_train'
 file_extension = '.csv'
@@ -14,15 +6,54 @@ main_cache_filename = source_filename + ".pkl"
 
 cache_folder = 'cache'
 
-import math
-import multiprocessing
 import os
 import pickle
 import time
-from multiprocessing import Pool
 
 import pandas as pd
-import sklearn.model_selection
+import matplotlib.pyplot as plt
+
+TARGET_LABELS = {
+    5: 'Sandal',
+    7: 'Sneaker',
+    9: 'Ankle_boot'
+}
+
+########################################################################################################################
+# Task 1:  pre-processing and visualisation
+########################################################################################################################
+
+def task1(df):
+    print_header('*', 'Task 1: Pre-processing and Visualisation')
+
+    target_df = df[df.iloc[:, 0].isin(TARGET_LABELS.keys())]
+
+    labels, features = separate_labels_and_features(target_df)
+
+    unique_labels = labels.unique()
+
+    for label in unique_labels:
+        first_instance = features[labels == label].iloc[0]
+        display_image(label, first_instance)
+    return labels, features
+
+
+
+def separate_labels_and_features(df):
+    labels = df.iloc[:, 0]  # First column as labels
+    features = df.iloc[:, 1:]  # All other columns as feature vectors
+    return labels, features
+
+
+def display_image(label, features):
+    label = label
+    pixels = features.values.reshape(28, 28)
+
+    plt.figure()
+    plt.title(f'Label: {TARGET_LABELS[label]}')
+    plt.imshow(pixels, cmap='gray')
+    plt.show()
+
 
 ########################################################################################################################
 # Output Formatting
@@ -67,6 +98,8 @@ def progressbar(i, upper_range, start_time):
 
 
 def main():
+    print_header('*', 'Machine Learning Project')
+
     start_time = time.time()  # start measuring time
 
     # Create a cache folder if it does not exist
@@ -76,7 +109,8 @@ def main():
     original_data = read_data()
     df = original_data.copy()
 
-    print_header('*', 'Machine Learning Project')
+    labels, features = task1(df)
+
 
 
 def read_data():
@@ -86,10 +120,10 @@ def read_data():
             df = pickle.load(f)
         print('Loaded data from cache\n')
     else:
-        df = pd.read_csv(source_filename + file_extension)
+        df = pd.read_csv(source_filename + file_extension, header=0)
         with open(cache_path, 'wb') as f:
             pickle.dump(df, f)
-        print('Loaded data from Excel and cached it')
+        print('Loaded data from csv file and cached it')
     return df
 
 # Press the green button in the gutter to run the script.
