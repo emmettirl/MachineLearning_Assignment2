@@ -1,7 +1,5 @@
-import threading
-
 import numpy as np
-from sklearn.linear_model import LogisticRegression, Perceptron
+from sklearn.linear_model import Perceptron
 from sklearn.model_selection import KFold, GridSearchCV
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
@@ -44,8 +42,7 @@ def task1(df):
         first_instance = features[labels == label].iloc[0]
         display_image(label, first_instance)
 
-    print('Unique labels:', unique_labels)
-    print('Number of instances:', len(features))
+    print('Data has been pre-processed and visualised\n')
     return labels, features
 
 def separate_labels_and_features(df):
@@ -69,16 +66,8 @@ def display_image(label, features):
 
 def task2(labels, features, num_samples=None):
     OutputFormat.print_header('h1', 'Task 2: Evaluation Procedure')
-
-    test_classifier = LogisticRegression(max_iter=1000)
-    results_df = run_classifier(labels, features, test_classifier, num_samples)
-
-    # print average results
-    OutputFormat.print_divider('h2')
-
-    print('Summary Results')
-    print(summary_results(results_df))
-
+    print('This task does not have it\'s own output, it is used to evaluate the classifiers in the following tasks')
+    print('See run_classifier() for more information\n')
 
 def run_classifier(labels, features, classifier, num_samples=None):
 
@@ -137,7 +126,7 @@ def train_and_evaluate_fold(args):
 
 def confusion_matrix(y_test, y_pred):
     print('Confusion Matrix\n')
-    print(pd.crosstab(y_test, y_pred, rownames=['Actual'], colnames=['Predicted']), '\n')
+    print(pd.crosstab(y_test, y_pred, rownames=['Actual Label'], colnames=['Predicted Label']), '\n')
 
 
 def summary_results(results):
@@ -161,20 +150,18 @@ def task3(labels, features, num_samples=None):
 
     summary_df = summary_results(results_df)
 
-    # print the average accuracy of the classifier
     print(f'Average Prediction Accuracy for {classifier_name}: {summary_df["Average"]["Accuracy"]:.2f}')
 
     plot_sample_size_vs_runtime(labels, features, classifier, classifier_name)
 
+    return summary_df
 
-# run the classifier for different sample sizes to find the relationship between sample size and run time
 def plot_sample_size_vs_runtime(labels, features, classifier, classifier_name):
     SampleSizeList = [2500, 5000, 7500, 10000, 12500, 15000, 17500]
 
     runtimes = []
     start_time = time.time()
 
-    # run the classifier for different sample sizes to find the relationship between sample size and run time
     for new_num_samples in SampleSizeList:
         iteration_start_time = time.time()
         run_classifier(labels, features, classifier, new_num_samples)
@@ -182,10 +169,9 @@ def plot_sample_size_vs_runtime(labels, features, classifier, classifier_name):
 
         OutputFormat.progressbar(SampleSizeList.index(new_num_samples), len(SampleSizeList), start_time)
 
-    # plot the relationship between sample size and run time
     plt.plot(SampleSizeList, runtimes)
     plt.xlabel('Sample Size')
-    plt.ylabel('Run Time (s)')
+    plt.ylabel('Run Time')
     plt.title(f'Sample Size vs Run Time for {classifier_name} Classifier')
     plt.show()
 
@@ -203,10 +189,12 @@ def task4(labels, features, num_samples=None):
 
     summary_df = summary_results(results_df)
 
-    # print the average accuracy of the classifier
     print(f'Average Prediction Accuracy for {classifier_name}: {summary_df["Average"]["Accuracy"]:.2f}')
 
     plot_sample_size_vs_runtime(labels, features, classifier, classifier_name)
+
+    return summary_df
+
 
 ########################################################################################################################
 # Task 5:  K-Nearest Neighbours Classifier
@@ -219,7 +207,13 @@ def task5(labels, features, num_samples=None):
     k = determine_best_k(labels, features, num_samples)
     classifier = KNeighborsClassifier(k)
 
+    results_df =  run_classifier(labels, features, classifier, num_samples)
+    summary_df = summary_results(results_df)
+
+    classifier = KNeighborsClassifier(k)
     plot_sample_size_vs_runtime(labels, features, classifier, classifier_name)
+
+    return summary_df
 
 
 def determine_best_k(labels, features, num_samples=None):
@@ -256,39 +250,38 @@ def task6(labels, features, num_samples=None):
     best_params = determine_best_y_value_for_rbf(labels, features, num_samples)
 
     classifier = SVC(kernel='rbf', gamma=best_params['gamma'], C=best_params['C'])
+    results_df = run_classifier(labels, features, classifier, num_samples)
+    summary_df = summary_results(results_df)
+
+    classifier = SVC(kernel='rbf', gamma=best_params['gamma'], C=best_params['C'])
     plot_sample_size_vs_runtime(labels, features, classifier, 'Support Vector Machine')
 
-# https://scikit-learn.org/stable/modules/svm.html#parameters-of-the-rbf-kernel
+    return summary_df
+
 def determine_best_y_value_for_rbf(labels, features, num_samples=None):
     if num_samples:
         features = features.sample(n=num_samples, random_state=42)
         labels = labels.loc[features.index]
 
-    # Feature scaling
     scaler = StandardScaler()
     features_scaled = scaler.fit_transform(features)
 
-    # Define parameter grid
     # param_grid = {'gamma': [0.001, 0.01, 0.1, 1, 10, 100], 'C': [0.1, 1, 10, 100, 1000]}
     param_grid = {'gamma': [0.001, 0.0025, 0.005, 0.01, 0.05, 0.75, 0.1, 1], 'C': [0.1, 1, 10, 100, 1000]}
     svc = SVC(kernel='rbf')
 
-    # Grid search with cross-validation
     grid_search = GridSearchCV(svc, param_grid, cv=5, n_jobs= multiprocessing.cpu_count() - 1)
     grid_search.fit(features_scaled, labels)
     best_params = grid_search.best_params_
 
-    # Plot heatmap of results for visualisation purposes
     plot_heatmap(grid_search.cv_results_, param_grid)
     print(f'Best parameters: {best_params}, with mean test score of {grid_search.best_score_:.2f}')
 
     return best_params
 
 def plot_heatmap(results, param_grid):
-    # Extract results
     mean_test_scores = results['mean_test_score'].reshape(len(param_grid['C']), len(param_grid['gamma']))
 
-    # Plot heatmap using matplotlib
     plt.figure(figsize=(8, 6))
     plt.imshow(mean_test_scores, interpolation='nearest', cmap=plt.cm.hot, vmin=0, vmax=1)
     plt.xlabel('Gamma')
@@ -303,10 +296,41 @@ def plot_heatmap(results, param_grid):
 # Task 7:  Classifier Comparison
 ########################################################################################################################
 
-def task7():
+def task7(perceptron_summary, decision_tree_summary, knn_summary, svm_summary):
     OutputFormat.print_header('h1', 'Task 7: Classifier Comparison')
 
-    pass
+    print('Perceptron Summary\n', perceptron_summary)
+    print('Decision Tree Summary\n', decision_tree_summary)
+    print('K-Nearest Neighbours Summary\n', knn_summary)
+    print('Support Vector Machine Summary\n', svm_summary)
+
+    # Plotting the average accuracy, of each classifier
+    plt.figure()
+    plt.bar(['Perceptron', 'Decision Tree', 'K-Nearest Neighbours', 'Support Vector Machine'],
+            [perceptron_summary['Average']['Accuracy'], decision_tree_summary['Average']['Accuracy'],
+             knn_summary['Average']['Accuracy'], svm_summary['Average']['Accuracy']])
+    plt.ylabel('Average Accuracy')
+    plt.title('Average Accuracy of Classifiers')
+    plt.show()
+
+    # Plotting the average training time, of each classifier
+    plt.figure()
+    plt.bar(['Perceptron', 'Decision Tree', 'K-Nearest Neighbours', 'Support Vector Machine'],
+            [perceptron_summary['Average']['Training Time'], decision_tree_summary['Average']['Training Time'],
+             knn_summary['Average']['Training Time'], svm_summary['Average']['Training Time']])
+    plt.ylabel('Average Training Time')
+    plt.title('Average Training Time of Classifiers')
+    plt.show()
+
+    # Plotting the average prediction time, of each classifier
+    plt.figure()
+    plt.bar(['Perceptron', 'Decision Tree', 'K-Nearest Neighbours', 'Support Vector Machine'],
+            [perceptron_summary['Average']['Prediction Time'], decision_tree_summary['Average']['Prediction Time'],
+             knn_summary['Average']['Prediction Time'], svm_summary['Average']['Prediction Time']])
+    plt.ylabel('Average Prediction Time')
+    plt.title('Average Prediction Time of Classifiers')
+    plt.show()
+
 
 ########################################################################################################################
 # Output Formatting
@@ -375,11 +399,11 @@ def main():
 
     labels, features = task1(df)
     task2(labels, features, num_samples)
-    task3(labels, features, num_samples)
-    task4(labels, features, num_samples)
-    task5(labels, features, num_samples)
-    task6(labels, features, num_samples)
-    # task7()
+    perceptron_summary = task3(labels, features, num_samples)
+    decision_tree_summary = task4(labels, features, num_samples)
+    knn_summary = task5(labels, features, num_samples)
+    svm_summary = task6(labels, features, num_samples)
+    task7(perceptron_summary, decision_tree_summary, knn_summary, svm_summary)
 
     print(f'\nTotal Runtime: {time.time() - start_time:.2f}s')
 
