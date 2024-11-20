@@ -34,10 +34,12 @@ num_samples=1800
 def task1(df):
     OutputFormat.print_header('h1', 'Task 1: Pre-processing and Visualisation')
 
+# select only the rows with the target labels then separate the labels and features
     target_df = df[df.iloc[:, 0].isin(TARGET_LABELS.keys())]
     labels, features = separate_labels_and_features(target_df)
     unique_labels = labels.unique()
 
+# display the first instance of each label
     for label in unique_labels:
         first_instance = features[labels == label].iloc[0]
         display_image(label, first_instance)
@@ -71,6 +73,7 @@ def task2(labels, features, num_samples=None):
 
 def run_classifier(labels, features, classifier, num_samples=None):
 
+# If num_samples is specified, sample the data, otherwise use all the data
     if num_samples:
         features = features.sample(n=num_samples, random_state=42)
         labels = labels.loc[features.index]
@@ -80,56 +83,73 @@ def run_classifier(labels, features, classifier, num_samples=None):
     y_tests = []
     y_preds = []
 
+    # Use multiprocessing to speed up the process
     num_processes = multiprocessing.cpu_count() - 2 # Use all but two cores to avoid overloading the system
+
     pool = multiprocessing.Pool(processes=num_processes)
+    # Create a list of arguments to pass to the train_and_evaluate_fold function
     args = [(train_index, test_index, features, labels, classifier) for train_index, test_index in kf.split(features)]
     fold_results = pool.map(train_and_evaluate_fold, args)
     pool.close()
-    pool.join()
+    pool.join() # Wait for all processes to finish
 
+    # Display the results for each fold
     for i, (accuracy, training_time, prediction_time, y_test, y_pred) in enumerate(fold_results):
         results.append((accuracy, training_time, prediction_time))
         y_tests.append(y_test)
         y_preds.append(y_pred)
 
+        # Display the results for each fold
         OutputFormat.print_divider('h2')
         print(f'Fold {i + 1}: Accuracy: {accuracy:.2f}, Training Time: {training_time:.2f}s, Prediction Time: {prediction_time:.2f}s')
         OutputFormat.print_divider('h3')
 
+        # Display the confusion matrix for each fold
         confusion_matrix(y_test, y_pred)
 
 
+    # return the results as a DataFrame for analysis and comparison
     results_df = pd.DataFrame(results, columns=['Accuracy', 'Training Time', 'Prediction Time'])
     return results_df
 
 
 def train_and_evaluate_fold(args):
+    # unpack the arguments
     train_index, test_index, features, labels, classifier = args
+
+    # Split the data into training and testing sets based on the kfold indices
     X_train, X_test = features.iloc[train_index], features.iloc[test_index]
     y_train, y_test = labels.iloc[train_index], labels.iloc[test_index]
 
-    # Feature scaling
     scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+    #  float32 to reduce memory size.
+    # Originally this was developed on my pc with much larger available memory.
+    # To run on this laptop  this was added after submission
+    X_train_scaled = scaler.fit_transform(X_train).astype(np.float32)
+    X_test_scaled = scaler.transform(X_test).astype(np.float32)
 
+    # Train the classifier and measure the time taken
     start_time = time.time()
     classifier.fit(X_train_scaled, y_train)
     training_time = time.time() - start_time
 
+    # Predict the test set and measure the time taken
     y_pred = classifier.predict(X_test_scaled)
     prediction_time = time.time() - start_time - training_time
 
+    # Calculate the accuracy of the classifier
     accuracy = (y_pred == y_test).mean()
     return accuracy, training_time, prediction_time, y_test, y_pred
 
-
+# Function to display the confusion matrix
 def confusion_matrix(y_test, y_pred):
     print('Confusion Matrix\n')
+    # Display the confusion matrix as a table
     print(pd.crosstab(y_test, y_pred, rownames=['Actual Label'], colnames=['Predicted Label']), '\n')
 
 
 def summary_results(results):
+    # Calculate the minimum, maximum and average of the results
     summary_df = pd.DataFrame({
         'Min': results.min(),
         'Max': results.max(),
@@ -145,7 +165,10 @@ def task3(labels, features, num_samples=None):
     OutputFormat.print_header('h1', 'Task 3: Perceptron Classifier')
     classifier_name = 'Perceptron'
 
+    # Create a Perceptron classifier
     classifier = Perceptron()
+
+    # use the run_classifier function from task 2 to train and evaluate the classifier
     results_df = run_classifier(labels, features, classifier, num_samples)
 
     summary_df = summary_results(results_df)
@@ -157,6 +180,8 @@ def task3(labels, features, num_samples=None):
     return summary_df
 
 def plot_sample_size_vs_runtime(labels, features, classifier, classifier_name):
+    # Test the classifier against a range of sample sizes to see how the runtime scales
+
     SampleSizeList = [2500, 5000, 7500, 10000, 12500, 15000, 17500]
 
     runtimes = []
@@ -204,9 +229,11 @@ def task5(labels, features, num_samples=None):
     OutputFormat.print_header('h1', 'Task 5: K-Nearest Neighbours Classifier')
     classifier_name = 'K-Nearest Neighbours'
 
+    # Determine the best value of k
     k = determine_best_k(labels, features, num_samples)
     classifier = KNeighborsClassifier(k)
 
+    # find results as normal with the best k value
     results_df =  run_classifier(labels, features, classifier, num_samples)
     summary_df = summary_results(results_df)
 
@@ -217,6 +244,7 @@ def task5(labels, features, num_samples=None):
 
 
 def determine_best_k(labels, features, num_samples=None):
+    # Test the classifier against a range of k values to determine the best value based on accuracy
     min_k = 1
     max_k = 15
     results = []
@@ -229,6 +257,7 @@ def determine_best_k(labels, features, num_samples=None):
         results.append(summary_df['Average']['Accuracy'])
         k += 1
 
+    # plot the results for visual analysis
     plt.plot(range(min_k, max_k + 1), results)
     plt.xlabel('K')
     plt.ylabel('Average Accuracy')
@@ -247,8 +276,10 @@ def determine_best_k(labels, features, num_samples=None):
 def task6(labels, features, num_samples=None):
     OutputFormat.print_header('h1', 'Task 6: Support Vector Machine Classifier')
 
+    # Determine the best gamma and C values for the RBF kernel using grid search
     best_params = determine_best_y_value_for_rbf(labels, features, num_samples)
 
+    # Use the best parameters to train and evaluate the classifier as normal
     classifier = SVC(kernel='rbf', gamma=best_params['gamma'], C=best_params['C'])
     results_df = run_classifier(labels, features, classifier, num_samples)
     summary_df = summary_results(results_df)
@@ -263,23 +294,32 @@ def determine_best_y_value_for_rbf(labels, features, num_samples=None):
         features = features.sample(n=num_samples, random_state=42)
         labels = labels.loc[features.index]
 
+    # this function does not use the standard run_classifier function as it requires a different approach
+    # As a result we need to scale the features here also
     scaler = StandardScaler()
-    features_scaled = scaler.fit_transform(features)
+    features_scaled = scaler.fit_transform(features).astype(np.float32)
 
+    # Use grid search to find the best gamma and C values
+    # I changed the range of gamma to be more focused around the best values
+    # The original range is commented out below
     # param_grid = {'gamma': [0.001, 0.01, 0.1, 1, 10, 100], 'C': [0.1, 1, 10, 100, 1000]}
     param_grid = {'gamma': [0.001, 0.0025, 0.005, 0.01, 0.05, 0.75, 0.1, 1], 'C': [0.1, 1, 10, 100, 1000]}
     svc = SVC(kernel='rbf')
 
+    # Use grid search to find the best parameters
     grid_search = GridSearchCV(svc, param_grid, cv=5, n_jobs= multiprocessing.cpu_count() - 1)
     grid_search.fit(features_scaled, labels)
     best_params = grid_search.best_params_
 
+    # Plot the results of the grid search for visual confirmation of results
     plot_heatmap(grid_search.cv_results_, param_grid)
     print(f'Best parameters: {best_params}, with mean test score of {grid_search.best_score_:.2f}')
 
     return best_params
 
 def plot_heatmap(results, param_grid):
+    # Plot the results of the grid search as a heatmap,
+    # with gamma on the x-axis and C on the y-axis, and the mean test score as the colour
     mean_test_scores = results['mean_test_score'].reshape(len(param_grid['C']), len(param_grid['gamma']))
 
     plt.figure(figsize=(8, 6))
@@ -299,6 +339,7 @@ def plot_heatmap(results, param_grid):
 def task7(perceptron_summary, decision_tree_summary, knn_summary, svm_summary):
     OutputFormat.print_header('h1', 'Task 7: Classifier Comparison')
 
+    # Display the summary of each classifier
     print('Perceptron Summary\n', perceptron_summary)
     print('Decision Tree Summary\n', decision_tree_summary)
     print('K-Nearest Neighbours Summary\n', knn_summary)
@@ -331,11 +372,14 @@ def task7(perceptron_summary, decision_tree_summary, knn_summary, svm_summary):
     plt.title('Average Prediction Time of Classifiers')
     plt.show()
 
+    # discussion in the report
+
 
 ########################################################################################################################
 # Output Formatting
 ########################################################################################################################
 class OutputFormat:
+    # a class to handle the formatting of the output to the console
     SECTION_DIVIDER = {
         'title': '█',
         'h1': '#',
@@ -397,6 +441,7 @@ def main():
     original_data = read_data()
     df = original_data.copy()
 
+    # run the tasks
     labels, features = task1(df)
     task2(labels, features, num_samples)
     perceptron_summary = task3(labels, features, num_samples)
@@ -408,6 +453,8 @@ def main():
     print(f'\nTotal Runtime: {time.time() - start_time:.2f}s')
 
 def read_data():
+    # I did this to avoid re-reading the data from the csv file every time I run the program
+    # this was more impactful in the previous project which used an excel file
     cache_path = os.path.join(cache_folder, main_cache_filename)
     if os.path.exists(cache_path):
         with open(cache_path, 'rb') as f:
